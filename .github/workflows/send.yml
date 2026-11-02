@@ -109,6 +109,37 @@ jobs:
               encoding="utf-8",
           )
           PY
+      - name: Patch friend search (real typing + longer wait)
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/douyin.py")
+          source = path.read_text(encoding="utf-8")
+
+          typing_anchor = "await search.fill(name)"
+          wait_anchor = "await self.page.wait_for_timeout(1_500)"
+
+          if typing_anchor not in source:
+              raise SystemExit("patch failed: typing anchor not found")
+          if wait_anchor not in source:
+              raise SystemExit("patch failed: wait anchor not found")
+
+          source = source.replace(
+              typing_anchor,
+              "await search.press_sequentially(name, delay=120)",
+              1,
+          )
+          source = source.replace(
+              wait_anchor,
+              "await self.page.wait_for_timeout(8_000)",
+              1,
+          )
+          path.write_text(source, encoding="utf-8")
+          print("patched app/douyin.py: real typing + 8s wait for results")
+          PY
+          python -c "import ast, pathlib; ast.parse(pathlib.Path('app/douyin.py').read_text(encoding='utf-8')); print('syntax ok')"
       - name: Run
         shell: bash
         run: |
