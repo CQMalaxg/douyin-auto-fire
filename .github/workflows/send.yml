@@ -109,7 +109,7 @@ jobs:
               encoding="utf-8",
           )
           PY
-      - name: Patch friend search (real typing + longer wait)
+      - name: Patch friend lookup (conversation list first)
         shell: bash
         run: |
           python - <<'PY'
@@ -118,26 +118,23 @@ jobs:
           path = Path("app/douyin.py")
           source = path.read_text(encoding="utf-8")
 
-          typing_anchor = "await search.fill(name)"
-          wait_anchor = "await self.page.wait_for_timeout(1_500)"
+          anchor = "search = await first_visible(self.page, SEARCH_INPUTS, self.timeout_ms)"
+          if anchor not in source:
+              raise SystemExit("patch failed: anchor not found")
 
-          if typing_anchor not in source:
-              raise SystemExit("patch failed: typing anchor not found")
-          if wait_anchor not in source:
-              raise SystemExit("patch failed: wait anchor not found")
+          body = [
+              "existing = await self._search_result(name)",
+              "if existing is not None:",
+              "    await existing.click(force=True)",
+              "    await self._confirm_opened(name)",
+              "    return",
+          ]
+          injected = body[0] + "\n" + "\n".join("        " + line for line in body[1:])
+          injected = injected + "\n        " + anchor
 
-          source = source.replace(
-              typing_anchor,
-              "await search.press_sequentially(name, delay=120)",
-              1,
-          )
-          source = source.replace(
-              wait_anchor,
-              "await self.page.wait_for_timeout(8_000)",
-              1,
-          )
+          source = source.replace(anchor, injected, 1)
           path.write_text(source, encoding="utf-8")
-          print("patched app/douyin.py: real typing + 8s wait for results")
+          print("patched app/douyin.py: click conversation row first, search as fallback")
           PY
           python -c "import ast, pathlib; ast.parse(pathlib.Path('app/douyin.py').read_text(encoding='utf-8')); print('syntax ok')"
       - name: Run
